@@ -1,37 +1,40 @@
 import pytest
-import requests
 import random
 import string
-from data import Urls
+from api_client import StellarBurgersClient
 
 @pytest.fixture
 def generate_user_data():
-    """Генерирует уникальные данные для регистрации"""
+    """Генерирует данные для пользователя"""
     def generate_string(length=10):
         return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-    email = f"{generate_string()}@yandex.ru"
-    password = generate_string()
-    name = generate_string()
     return {
-        "email": email,
-        "password": password,
-        "name": name
+        "email": f"{generate_string()}@yandex.ru",
+        "password": generate_string(),
+        "name": generate_string()
     }
 
 @pytest.fixture
-def create_user(generate_user_data):
-    """Создает пользователя и удаляет его после теста"""
-    response = requests.post(Urls.CREATE_USER, data=generate_user_data)
-    token = response.json().get("accessToken")
-    yield response, generate_user_data
-    if token:
-        requests.delete(Urls.USER_INFO, headers={"Authorization": token})
+def clean_user():
+    """Фикстура принимает объекты ответов (response).В конце теста она сама проверяет, был ли создан токен, и если да — удаляет юзера."""
+    responses = []
+    yield responses
+    for response in responses:
+        token = response.json().get("accessToken")
+        if token:
+            StellarBurgersClient.delete_user(token)
+
+@pytest.fixture
+def get_ingredients():
+    """Получаем список реальных хешей ингредиентов.Фикстура теперь доступна глобально."""
+    response = StellarBurgersClient.get_ingredients()
+    data = response.json().get("data", [])
+    return [ingredient["_id"] for ingredient in data]
 
 @pytest.fixture
 def create_registered_user(generate_user_data):
-    """Только создает пользователя и возвращает токен и данные (для тестов заказа/логина)"""
-    response = requests.post(Urls.CREATE_USER, data=generate_user_data)
+    response = StellarBurgersClient.create_user(generate_user_data)
     token = response.json().get("accessToken")
     yield response, generate_user_data, token
     if token:
-        requests.delete(Urls.USER_INFO, headers={"Authorization": token})
+        StellarBurgersClient.delete_user(token)
